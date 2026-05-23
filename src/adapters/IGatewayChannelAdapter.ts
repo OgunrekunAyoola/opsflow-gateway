@@ -13,6 +13,19 @@ export interface IGatewayChannelAdapter {
   readonly channel: 'whatsapp' | 'email';
 
   /**
+   * Extract the channel-specific routing key from a verified payload.
+   *
+   * For WhatsApp: `entry[0].changes[0].value.metadata.phone_number_id`,
+   * which the gateway then looks up in the Redis routing cache to resolve
+   * `tenantId`. For future channels: the recipient mailbox (email), the
+   * Slack workspace id, etc.
+   *
+   * Returns null when the payload is missing the routing field. The handler
+   * treats null as "log and drop, return 200".
+   */
+  extractRoutingKey(payload: unknown): string | null;
+
+  /**
    * Constant-time HMAC verification of a webhook body.
    *
    * @param rawBody  The raw request body string as received (no JSON parse).

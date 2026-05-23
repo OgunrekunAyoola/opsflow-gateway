@@ -1,0 +1,17 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "opsflow-gateway"
+resolve_s3 = true
+s3_prefix = "opsflow-gateway"
+region = "eu-west-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+fail_on_empty_changeset = false
+
+# Pass secrets at deploy time, never check them in:
+#   sam deploy \
+#     --parameter-overrides \
+#       RedisUrl="redis://..." \
+#       WhatsAppAppSecret="..." \
+#       Stage=prod

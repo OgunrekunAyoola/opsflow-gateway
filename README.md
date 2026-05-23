@@ -87,10 +87,12 @@ Never commit `.env` files. Secrets are provisioned at deploy time.
 | B2 — Contract types | ✅ |
 | B3 — WhatsApp adapter (verify + normalise) | ✅ |
 | ~~B4 — Email adapter~~ | ⛔ descoped (WhatsApp-only vertical for now) |
-| B5 — Redis routing cache reads | ⬜ |
-| B6 — Queue publish | ⬜ |
-| B7 — Lambda handler | ⬜ |
-| B8 — AWS deploy | ⬜ |
+| B5 — Redis routing cache reads | ✅ |
+| B6 — Queue publish | ✅ |
+| B7 — Lambda handler | ✅ |
+| B8 — AWS deploy (SAM template + docs) | 🟡 ready-to-deploy |
+
+See [docs/DEPLOY.md](./docs/DEPLOY.md) for SAM-based deployment instructions.
 
 ## License
 

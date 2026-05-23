@@ -256,10 +256,10 @@ checked in for privacy — ask the user if you need it).
 | B2 | `NormalisedMessage` type + `IGatewayChannelAdapter` interface | ✅ 2026-05-23 |
 | B3 | `WhatsAppAdapter`: `verifyWebhook()`, `verifyChallenge()`, `normalise()` | ✅ 2026-05-23 |
 | ~~B4~~ | ~~`EmailAdapter`~~ | ⛔ descoped 2026-05-23 — WhatsApp-only for current vertical |
-| B5 | Redis routing cache reads (`routing/routingCache.ts`) | ⬜ |
-| B6 | Queue publish to `inbound-messages` | ⬜ |
-| B7 | Lambda handler — routes by path + method to correct adapter | ⬜ |
-| B8 | Deploy: AWS Lambda + Function URL | ⬜ |
+| B5 | Redis routing cache reads (`routing/routingCache.ts`) | ✅ 2026-05-23 |
+| B6 | Queue publish to `inbound-messages` (LPUSH; Core does RPOP for FIFO) | ✅ 2026-05-23 |
+| B7 | Lambda handler — routes GET/POST `/webhooks/whatsapp`; always returns 200 | ✅ 2026-05-23 |
+| B8 | Deploy: SAM template (`template.yaml`) + deploy docs (`docs/DEPLOY.md`); awaiting AWS credentials | 🟡 ready-to-deploy |
 
 > **Email is intentionally not in scope.** The target vertical's inbound
 > traffic is WhatsApp-dominated. Adding email later is one new adapter file

@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  opsflow-gateway — inbound channel adapter host for OpsFlow.
+  Lambda + Function URL. Receives WhatsApp webhooks, verifies, normalises,
+  enqueues to the Redis `inbound-messages` list consumed by opsflow-core.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  RedisUrl:
+    Type: String
+    Description: redis://USER:PASS@HOST:PORT/DB — same Redis as opsflow-core
+    NoEcho: true
+  WhatsAppAppSecret:
+    Type: String
+    Description: Meta App Secret used to HMAC-verify inbound webhooks
+    NoEcho: true
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues: [debug, info, warn, error]
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures: [arm64]            # Graviton — cheaper + faster for this workload
+    MemorySize: 256
+    Timeout: 10                        # Meta times webhooks out around 20s; keep us well under
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  GatewayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub opsflow-gateway-${Stage}
+      Handler: dist/handler.handler
+      CodeUri: ./
+      Environment:
+        Variables:
+          REDIS_URL: !Ref RedisUrl
+          WHATSAPP_APP_SECRET: !Ref WhatsAppAppSecret
+          LOG_LEVEL: !Ref LogLevel
+          NODE_ENV: !Ref Stage
+      FunctionUrlConfig:
+        AuthType: NONE                 # Meta cannot sign IAM; we authenticate via HMAC in code
+        InvokeMode: BUFFERED
+        Cors:
+          AllowMethods: [GET, POST]
+          AllowOrigins: ['*']
+
+Outputs:
+  GatewayUrl:
+    Description: Public URL Meta should call (set as the Webhook URL in the Meta App dashboard)
+    Value: !GetAtt GatewayFunctionUrl.FunctionUrl
+  FunctionName:
+    Value: !Ref GatewayFunction

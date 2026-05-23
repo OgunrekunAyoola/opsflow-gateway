@@ -101,6 +101,46 @@ describe('WhatsAppAdapter.verifyChallenge', () => {
   });
 });
 
+describe('WhatsAppAdapter.extractRoutingKey', () => {
+  test('returns metadata.phone_number_id from the first entry', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            { field: 'messages', value: { metadata: { phone_number_id: 'PHONE-1', display_phone_number: '+234' } } },
+          ],
+        },
+      ],
+    };
+    expect(adapter.extractRoutingKey(payload)).toBe('PHONE-1');
+  });
+
+  test('returns first match across multiple entries', () => {
+    const payload = {
+      entry: [
+        { changes: [{ field: 'messages', value: { metadata: {} } }] },
+        { changes: [{ field: 'messages', value: { metadata: { phone_number_id: 'PHONE-2' } } }] },
+      ],
+    };
+    expect(adapter.extractRoutingKey(payload)).toBe('PHONE-2');
+  });
+
+  test('returns null when metadata is missing', () => {
+    const payload = { entry: [{ changes: [{ field: 'messages', value: {} }] }] };
+    expect(adapter.extractRoutingKey(payload)).toBeNull();
+  });
+
+  test('returns null for non-object payload', () => {
+    expect(adapter.extractRoutingKey(null)).toBeNull();
+    expect(adapter.extractRoutingKey('not json')).toBeNull();
+    expect(adapter.extractRoutingKey([])).toBeNull();
+  });
+
+  test('returns null when entries are empty', () => {
+    expect(adapter.extractRoutingKey({ entry: [] })).toBeNull();
+  });
+});
+
 describe('WhatsAppAdapter.normalise', () => {
   const baseEnv = (messages: any[]) => ({
     object: 'whatsapp_business_account',

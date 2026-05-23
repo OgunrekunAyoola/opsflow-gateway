@@ -16,6 +16,31 @@ export class WhatsAppAdapter implements IGatewayChannelAdapter {
   readonly channel = 'whatsapp' as const;
 
   /**
+   * Extract the Meta `phone_number_id` so the handler can resolve tenantId.
+   * Scans entries until a `value.metadata.phone_number_id` is found — a
+   * single webhook targets a single business phone number, so the first hit
+   * is authoritative.
+   */
+  extractRoutingKey(payload: unknown): string | null {
+    if (!isObject(payload)) return null;
+    const entries = Array.isArray(payload.entry) ? payload.entry : [];
+    for (const entry of entries) {
+      if (!isObject(entry)) continue;
+      const changes = Array.isArray(entry.changes) ? entry.changes : [];
+      for (const change of changes) {
+        if (!isObject(change)) continue;
+        const value = change.value;
+        if (!isObject(value)) continue;
+        const meta = value.metadata;
+        if (isObject(meta) && typeof meta.phone_number_id === 'string') {
+          return meta.phone_number_id;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Verify Meta's `X-Hub-Signature-256` header.
    * Value format: "sha256=<hex>". We HMAC the raw body with the App Secret
    * and compare in constant time.
