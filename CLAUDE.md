@@ -9,7 +9,13 @@
 
 `opsflow-gateway` is the **inbound channel adapter host** for OpsFlow. It runs
 on **AWS Lambda** (Function URL) and is the single ingress point for every
-external channel webhook — WhatsApp, Email, and any future channel.
+external channel webhook.
+
+**Current scope: WhatsApp only.** The architecture supports additional channels
+(Email, Instagram DMs, SMS, Slack, …) via the `IGatewayChannelAdapter`
+interface, but only WhatsApp is implemented because that's where the target
+vertical's traffic is. Adding a channel = one new adapter file + tests; no
+gateway core changes needed.
 
 Its only job is, per inbound request:
 
@@ -50,10 +56,11 @@ ADR-078 splits the OpsFlow runtime into two repos:
    absorbed by Lambda autoscaling, then processed by Core workers at their
    sustainable rate. No need to over-provision Core for peak.
 
-**Long-term goal:** every new channel (WhatsApp Cloud API, Instagram DMs,
-Email/SES, SMS/Twilio, Slack, Telegram) lands here as a new `IGatewayChannelAdapter`
+**Long-term goal:** every new channel lands here as a new `IGatewayChannelAdapter`
 implementation. Core never learns the vendor; it only consumes
-`NormalisedMessage`.
+`NormalisedMessage`. Likely future adapters in priority order: Instagram DMs,
+Email (Postmark/SES), SMS (Twilio), Slack, Telegram — but none are in scope
+right now.
 
 ---
 
@@ -179,7 +186,6 @@ src/
   adapters/
     IGatewayChannelAdapter.ts   ← interface every channel implements
     WhatsAppAdapter.ts          ← Meta WhatsApp Cloud API
-    EmailAdapter.ts             ← (B4) inbound email — Postmark/SES
   routing/
     routingCache.ts             ← Redis reads (phoneNumberId, verifyToken lookups)
   queue/
@@ -206,7 +212,6 @@ The handler is dispatched by `(method, path)`:
 |---|---|---|
 | `GET`  | `/webhooks/whatsapp` | Meta webhook subscription challenge |
 | `POST` | `/webhooks/whatsapp` | Meta inbound message webhook |
-| `POST` | `/webhooks/email/:provider` | Inbound email (Postmark / SES) |
 
 Anything else returns `200 OK` with an empty body (still, never 4xx).
 
@@ -250,11 +255,17 @@ checked in for privacy — ask the user if you need it).
 | B1 | Repo setup: TypeScript, esbuild, ioredis, Lambda skeleton | ✅ 2026-05-23 |
 | B2 | `NormalisedMessage` type + `IGatewayChannelAdapter` interface | ✅ 2026-05-23 |
 | B3 | `WhatsAppAdapter`: `verifyWebhook()`, `verifyChallenge()`, `normalise()` | ✅ 2026-05-23 |
-| B4 | `EmailAdapter`: `verifyWebhook()`, `normalise()` | ⬜ |
+| ~~B4~~ | ~~`EmailAdapter`~~ | ⛔ descoped 2026-05-23 — WhatsApp-only for current vertical |
 | B5 | Redis routing cache reads (`routing/routingCache.ts`) | ⬜ |
 | B6 | Queue publish to `inbound-messages` | ⬜ |
 | B7 | Lambda handler — routes by path + method to correct adapter | ⬜ |
 | B8 | Deploy: AWS Lambda + Function URL | ⬜ |
+
+> **Email is intentionally not in scope.** The target vertical's inbound
+> traffic is WhatsApp-dominated. Adding email later is one new adapter file
+> (`src/adapters/EmailAdapter.ts`) + tests; nothing else changes. The
+> `NormalisedMessage.channel` type union still includes `'email'` to keep
+> that path frictionless when revisited.
 
 ---
 

@@ -1,9 +1,10 @@
 # opsflow-gateway
 
 Inbound channel adapter host for [OpsFlow](https://github.com/OgunrekunAyoola/opsFlow-Agent-Desk).
-Receives webhooks from WhatsApp, Email, and future channels — verifies them,
-resolves the tenant, normalises the payload, and enqueues it for the core
-backend to process.
+Receives WhatsApp webhooks — verifies them, resolves the tenant, normalises
+the payload, and enqueues it for the core backend to process. The
+`IGatewayChannelAdapter` interface keeps the door open for additional channels
+(email, SMS, etc.) when the product needs them.
 
 Runs on **AWS Lambda** (Function URL).
 
@@ -85,7 +86,7 @@ Never commit `.env` files. Secrets are provisioned at deploy time.
 | B1 — Repo skeleton | ✅ |
 | B2 — Contract types | ✅ |
 | B3 — WhatsApp adapter (verify + normalise) | ✅ |
-| B4 — Email adapter | ⬜ |
+| ~~B4 — Email adapter~~ | ⛔ descoped (WhatsApp-only vertical for now) |
 | B5 — Redis routing cache reads | ⬜ |
 | B6 — Queue publish | ⬜ |
 | B7 — Lambda handler | ⬜ |
