@@ -25,7 +25,7 @@ const OK_EMPTY: APIGatewayProxyStructuredResultV2 = { statusCode: 200, body: '' 
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> {
   try {
     const method = event.requestContext?.http?.method?.toUpperCase() ?? 'GET';
-    const path   = event.requestContext?.http?.path ?? event.rawPath ?? '/';
+    const path = event.requestContext?.http?.path ?? event.rawPath ?? '/';
 
     if (method === 'GET' && path === '/webhooks/whatsapp') {
       return await handleWhatsAppChallenge(event);
@@ -47,10 +47,12 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
 
 // ── GET challenge ───────────────────────────────────────────────────────────
 
-async function handleWhatsAppChallenge(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> {
+async function handleWhatsAppChallenge(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
   const q = event.queryStringParameters ?? {};
-  const mode      = q['hub.mode'];
-  const token     = q['hub.verify_token'];
+  const mode = q['hub.mode'];
+  const token = q['hub.verify_token'];
   const challenge = q['hub.challenge'];
 
   if (!token) {
@@ -85,7 +87,9 @@ async function handleWhatsAppChallenge(event: APIGatewayProxyEventV2): Promise<A
 
 // ── POST inbound ─────────────────────────────────────────────────────────────
 
-async function handleWhatsAppInbound(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> {
+async function handleWhatsAppInbound(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
   const rawBody = readRawBody(event);
   if (rawBody === null) {
     log('warn', 'wa_inbound_missing_body');
@@ -114,7 +118,7 @@ async function handleWhatsAppInbound(event: APIGatewayProxyEventV2): Promise<API
 
   const phoneNumberId = whatsappAdapter.extractRoutingKey(payload);
   if (!phoneNumberId) {
-    log('info', 'wa_inbound_no_routing_key');  // likely a status update with no metadata
+    log('info', 'wa_inbound_no_routing_key'); // likely a status update with no metadata
     return OK_EMPTY;
   }
 

@@ -40,9 +40,9 @@ beforeEach(() => {
 
 function buildEvent(opts: {
   method: 'GET' | 'POST';
-  path?:  string;
+  path?: string;
   query?: Record<string, string>;
-  body?:  string;
+  body?: string;
   headers?: Record<string, string>;
   isBase64Encoded?: boolean;
 }): APIGatewayProxyEventV2 {
@@ -81,24 +81,31 @@ function sign(body: string, secret = APP_SECRET): string {
   return `sha256=${mac}`;
 }
 
-const inboundBody = (overrides: any = {}) => JSON.stringify({
-  entry: [
-    {
-      changes: [
-        {
-          field: 'messages',
-          value: {
-            metadata: { phone_number_id: 'PHONE-1', display_phone_number: '+234' },
-            messages: [
-              { from: '2348012345678', id: 'wamid.ABC', timestamp: '1716372000', type: 'text', text: { body: 'hi' } },
-            ],
-            ...overrides,
+const inboundBody = (overrides: any = {}) =>
+  JSON.stringify({
+    entry: [
+      {
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              metadata: { phone_number_id: 'PHONE-1', display_phone_number: '+234' },
+              messages: [
+                {
+                  from: '2348012345678',
+                  id: 'wamid.ABC',
+                  timestamp: '1716372000',
+                  type: 'text',
+                  text: { body: 'hi' },
+                },
+              ],
+              ...overrides,
+            },
           },
-        },
-      ],
-    },
-  ],
-});
+        ],
+      },
+    ],
+  });
 
 // ── GET /webhooks/whatsapp (challenge) ──────────────────────────────────────
 
@@ -106,10 +113,16 @@ describe('GET /webhooks/whatsapp — subscription challenge', () => {
   test('echoes the challenge when the verify token resolves to a tenant', async () => {
     mockGetTenantIdByVerifyToken.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'GET',
-      query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'verify-abc', 'hub.challenge': 'CHALLENGE-XYZ' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'GET',
+        query: {
+          'hub.mode': 'subscribe',
+          'hub.verify_token': 'verify-abc',
+          'hub.challenge': 'CHALLENGE-XYZ',
+        },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('CHALLENGE-XYZ');
@@ -119,20 +132,24 @@ describe('GET /webhooks/whatsapp — subscription challenge', () => {
   test('returns 200 empty when token is unknown', async () => {
     mockGetTenantIdByVerifyToken.mockResolvedValueOnce(null);
 
-    const res = await handler(buildEvent({
-      method: 'GET',
-      query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'unknown', 'hub.challenge': 'X' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'GET',
+        query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'unknown', 'hub.challenge': 'X' },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
   });
 
   test('returns 200 empty when token query param is missing', async () => {
-    const res = await handler(buildEvent({
-      method: 'GET',
-      query: { 'hub.mode': 'subscribe', 'hub.challenge': 'X' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'GET',
+        query: { 'hub.mode': 'subscribe', 'hub.challenge': 'X' },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
@@ -142,10 +159,12 @@ describe('GET /webhooks/whatsapp — subscription challenge', () => {
   test('returns 200 empty when mode is not subscribe (even with valid token)', async () => {
     mockGetTenantIdByVerifyToken.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'GET',
-      query: { 'hub.mode': 'unsubscribe', 'hub.verify_token': 'verify-abc', 'hub.challenge': 'X' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'GET',
+        query: { 'hub.mode': 'unsubscribe', 'hub.verify_token': 'verify-abc', 'hub.challenge': 'X' },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
@@ -154,10 +173,12 @@ describe('GET /webhooks/whatsapp — subscription challenge', () => {
   test('returns 200 empty when routing cache lookup throws (redis down)', async () => {
     mockGetTenantIdByVerifyToken.mockRejectedValueOnce(new Error('Redis down'));
 
-    const res = await handler(buildEvent({
-      method: 'GET',
-      query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'verify-abc', 'hub.challenge': 'X' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'GET',
+        query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'verify-abc', 'hub.challenge': 'X' },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
@@ -171,11 +192,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     const body = inboundBody();
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockGetTenantIdByPhoneNumber).toHaveBeenCalledWith('PHONE-1');
@@ -183,10 +206,10 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     const msgs = mockPublishInboundMessages.mock.calls[0][0];
     expect(msgs).toHaveLength(1);
     expect(msgs[0]).toMatchObject({
-      tenantId:   'tenant-1',
-      channel:    'whatsapp',
-      from:       '2348012345678',
-      body:       'hi',
+      tenantId: 'tenant-1',
+      channel: 'whatsapp',
+      from: '2348012345678',
+      body: 'hi',
       externalId: 'wamid.ABC',
     });
   });
@@ -195,11 +218,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     const body = inboundBody();
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'x-hub-signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'x-hub-signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).toHaveBeenCalled();
@@ -207,16 +232,18 @@ describe('POST /webhooks/whatsapp — inbound', () => {
 
   test('handles base64-encoded body from Lambda Function URL', async () => {
     const body = inboundBody();
-    const b64  = Buffer.from(body, 'utf8').toString('base64');
+    const b64 = Buffer.from(body, 'utf8').toString('base64');
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body: b64,
-      isBase64Encoded: true,
-      // HMAC is computed against the DECODED body
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body: b64,
+        isBase64Encoded: true,
+        // HMAC is computed against the DECODED body
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).toHaveBeenCalled();
@@ -225,11 +252,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
   test('drops on invalid HMAC and never reaches routing or queue', async () => {
     const body = inboundBody();
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body, 'wrong-secret') },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body, 'wrong-secret') },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
@@ -250,11 +279,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     delete process.env.WHATSAPP_APP_SECRET;
     const body = inboundBody();
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': 'sha256=ignored' },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': 'sha256=ignored' },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).not.toHaveBeenCalled();
@@ -264,11 +295,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
   test('drops on invalid JSON body (verifies signature first, then fails parse)', async () => {
     const body = '{not json';
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockGetTenantIdByPhoneNumber).not.toHaveBeenCalled();
@@ -280,11 +313,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
       entry: [{ changes: [{ field: 'messages', value: { statuses: [{ id: 'X', status: 'delivered' }] } }] }],
     });
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockGetTenantIdByPhoneNumber).not.toHaveBeenCalled();
@@ -295,11 +330,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     const body = inboundBody();
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce(null);
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).not.toHaveBeenCalled();
@@ -315,7 +352,9 @@ describe('POST /webhooks/whatsapp — inbound', () => {
               field: 'messages',
               value: {
                 metadata: { phone_number_id: 'PHONE-1' },
-                statuses: [{ id: 'wamid.X', status: 'delivered', timestamp: '1716372000', recipient_id: '234' }],
+                statuses: [
+                  { id: 'wamid.X', status: 'delivered', timestamp: '1716372000', recipient_id: '234' },
+                ],
               },
             },
           ],
@@ -324,11 +363,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     });
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).not.toHaveBeenCalled();
@@ -339,11 +380,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
     mockPublishInboundMessages.mockRejectedValueOnce(new Error('Redis down'));
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('');
@@ -353,11 +396,13 @@ describe('POST /webhooks/whatsapp — inbound', () => {
     const body = inboundBody();
     mockGetTenantIdByPhoneNumber.mockRejectedValueOnce(new Error('Redis down'));
 
-    const res = await handler(buildEvent({
-      method: 'POST',
-      body,
-      headers: { 'X-Hub-Signature-256': sign(body) },
-    }));
+    const res = await handler(
+      buildEvent({
+        method: 'POST',
+        body,
+        headers: { 'X-Hub-Signature-256': sign(body) },
+      }),
+    );
 
     expect(res.statusCode).toBe(200);
     expect(mockPublishInboundMessages).not.toHaveBeenCalled();
@@ -368,8 +413,8 @@ describe('POST /webhooks/whatsapp — inbound', () => {
 
 describe('unknown routes', () => {
   test.each([
-    ['GET',  '/'],
-    ['GET',  '/health'],
+    ['GET', '/'],
+    ['GET', '/health'],
     ['POST', '/webhooks/email/postmark'],
     ['DELETE', '/webhooks/whatsapp'],
   ])('returns 200 empty for %s %s', async (method, path) => {

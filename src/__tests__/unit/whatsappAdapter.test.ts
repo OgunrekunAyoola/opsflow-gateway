@@ -77,12 +77,14 @@ describe('WhatsAppAdapter.verifyChallenge', () => {
   });
 
   test('returns null when mode is not subscribe', () => {
-    expect(adapter.verifyChallenge({
-      mode: 'unsubscribe',
-      token: 'verify-token-123',
-      challenge: '987654321',
-      expectedToken: 'verify-token-123',
-    })).toBeNull();
+    expect(
+      adapter.verifyChallenge({
+        mode: 'unsubscribe',
+        token: 'verify-token-123',
+        challenge: '987654321',
+        expectedToken: 'verify-token-123',
+      }),
+    ).toBeNull();
   });
 
   test('returns null when any required field is missing', () => {
@@ -92,12 +94,14 @@ describe('WhatsAppAdapter.verifyChallenge', () => {
   });
 
   test('returns null when expectedToken differs in length', () => {
-    expect(adapter.verifyChallenge({
-      mode: 'subscribe',
-      token: 'short',
-      challenge: 'c',
-      expectedToken: 'a-much-longer-token',
-    })).toBeNull();
+    expect(
+      adapter.verifyChallenge({
+        mode: 'subscribe',
+        token: 'short',
+        challenge: 'c',
+        expectedToken: 'a-much-longer-token',
+      }),
+    ).toBeNull();
   });
 });
 
@@ -107,7 +111,10 @@ describe('WhatsAppAdapter.extractRoutingKey', () => {
       entry: [
         {
           changes: [
-            { field: 'messages', value: { metadata: { phone_number_id: 'PHONE-1', display_phone_number: '+234' } } },
+            {
+              field: 'messages',
+              value: { metadata: { phone_number_id: 'PHONE-1', display_phone_number: '+234' } },
+            },
           ],
         },
       ],
@@ -147,9 +154,7 @@ describe('WhatsAppAdapter.normalise', () => {
     entry: [
       {
         id: 'WABA-1',
-        changes: [
-          { field: 'messages', value: { messaging_product: 'whatsapp', messages } },
-        ],
+        changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', messages } }],
       },
     ],
   });
@@ -166,15 +171,18 @@ describe('WhatsAppAdapter.normalise', () => {
   });
 
   test('normalises a single text message', () => {
-    const out = adapter.normalise(baseEnv([
-      {
-        from: '2348012345678',
-        id: 'wamid.ABC',
-        timestamp: '1716372000',
-        type: 'text',
-        text: { body: 'Hello support' },
-      },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '2348012345678',
+          id: 'wamid.ABC',
+          timestamp: '1716372000',
+          type: 'text',
+          text: { body: 'Hello support' },
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(1);
     expect(out[0]).toEqual({
@@ -189,21 +197,28 @@ describe('WhatsAppAdapter.normalise', () => {
   });
 
   test('handles epoch seconds as number too', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.X', timestamp: 1716372000, type: 'text', text: { body: 'hi' } },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([{ from: '234', id: 'wamid.X', timestamp: 1716372000, type: 'text', text: { body: 'hi' } }]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(1);
     expect(out[0].timestamp).toBe(new Date(1716372000 * 1000).toISOString());
   });
 
   test('extracts caption from media messages and leaves mediaUrls undefined', () => {
-    const out = adapter.normalise(baseEnv([
-      {
-        from: '234', id: 'wamid.IMG', timestamp: '1716372000',
-        type: 'image', image: { id: 'META-MEDIA-1', mime_type: 'image/jpeg', caption: 'Check this' },
-      },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '234',
+          id: 'wamid.IMG',
+          timestamp: '1716372000',
+          type: 'image',
+          image: { id: 'META-MEDIA-1', mime_type: 'image/jpeg', caption: 'Check this' },
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(1);
     expect(out[0].body).toBe('Check this');
@@ -211,53 +226,75 @@ describe('WhatsAppAdapter.normalise', () => {
   });
 
   test('keeps empty body for media without caption', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.AUD', timestamp: '1716372000', type: 'audio', audio: { id: 'M' } },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([{ from: '234', id: 'wamid.AUD', timestamp: '1716372000', type: 'audio', audio: { id: 'M' } }]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(1);
     expect(out[0].body).toBe('');
   });
 
   test('builds a body from location name and address', () => {
-    const out = adapter.normalise(baseEnv([
-      {
-        from: '234', id: 'wamid.LOC', timestamp: '1716372000', type: 'location',
-        location: { latitude: 6.5, longitude: 3.4, name: 'Lekki Office', address: '12 Admiralty Way' },
-      },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '234',
+          id: 'wamid.LOC',
+          timestamp: '1716372000',
+          type: 'location',
+          location: { latitude: 6.5, longitude: 3.4, name: 'Lekki Office', address: '12 Admiralty Way' },
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out[0].body).toBe('Lekki Office — 12 Admiralty Way');
   });
 
   test('falls back to placeholder for location without name/address', () => {
-    const out = adapter.normalise(baseEnv([
-      {
-        from: '234', id: 'wamid.LOC2', timestamp: '1716372000', type: 'location',
-        location: { latitude: 6.5, longitude: 3.4 },
-      },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '234',
+          id: 'wamid.LOC2',
+          timestamp: '1716372000',
+          type: 'location',
+          location: { latitude: 6.5, longitude: 3.4 },
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out[0].body).toBe('[location shared]');
   });
 
   test('encodes reactions as [reaction: emoji]', () => {
-    const out = adapter.normalise(baseEnv([
-      {
-        from: '234', id: 'wamid.R', timestamp: '1716372000', type: 'reaction',
-        reaction: { message_id: 'wamid.ABC', emoji: '👍' },
-      },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '234',
+          id: 'wamid.R',
+          timestamp: '1716372000',
+          type: 'reaction',
+          reaction: { message_id: 'wamid.ABC', emoji: '👍' },
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out[0].body).toBe('[reaction: 👍]');
   });
 
   test('emits multiple messages from a single webhook (Meta batching)', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.A', timestamp: '1716372000', type: 'text', text: { body: 'one' } },
-      { from: '234', id: 'wamid.B', timestamp: '1716372001', type: 'text', text: { body: 'two' } },
-      { from: '234', id: 'wamid.C', timestamp: '1716372002', type: 'text', text: { body: 'three' } },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        { from: '234', id: 'wamid.A', timestamp: '1716372000', type: 'text', text: { body: 'one' } },
+        { from: '234', id: 'wamid.B', timestamp: '1716372001', type: 'text', text: { body: 'two' } },
+        { from: '234', id: 'wamid.C', timestamp: '1716372002', type: 'text', text: { body: 'three' } },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(3);
     expect(out.map((m) => m.body)).toEqual(['one', 'two', 'three']);
@@ -268,12 +305,26 @@ describe('WhatsAppAdapter.normalise', () => {
       entry: [
         {
           changes: [
-            { field: 'messages', value: { messages: [{ from: '1', id: 'A', timestamp: '1716372000', type: 'text', text: { body: 'a' } }] } },
+            {
+              field: 'messages',
+              value: {
+                messages: [
+                  { from: '1', id: 'A', timestamp: '1716372000', type: 'text', text: { body: 'a' } },
+                ],
+              },
+            },
           ],
         },
         {
           changes: [
-            { field: 'messages', value: { messages: [{ from: '2', id: 'B', timestamp: '1716372000', type: 'text', text: { body: 'b' } }] } },
+            {
+              field: 'messages',
+              value: {
+                messages: [
+                  { from: '2', id: 'B', timestamp: '1716372000', type: 'text', text: { body: 'b' } },
+                ],
+              },
+            },
           ],
         },
       ],
@@ -306,9 +357,7 @@ describe('WhatsAppAdapter.normalise', () => {
     const payload = {
       entry: [
         {
-          changes: [
-            { field: 'account_alerts', value: { foo: 'bar' } },
-          ],
+          changes: [{ field: 'account_alerts', value: { foo: 'bar' } }],
         },
       ],
     };
@@ -316,37 +365,53 @@ describe('WhatsAppAdapter.normalise', () => {
   });
 
   test('drops messages missing required fields (id / from / timestamp)', () => {
-    const out = adapter.normalise(baseEnv([
-      { id: 'wamid.X', timestamp: '1716372000', type: 'text', text: { body: 'no from' } },
-      { from: '234', timestamp: '1716372000', type: 'text', text: { body: 'no id' } },
-      { from: '234', id: 'wamid.Y', type: 'text', text: { body: 'no ts' } },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        { id: 'wamid.X', timestamp: '1716372000', type: 'text', text: { body: 'no from' } },
+        { from: '234', timestamp: '1716372000', type: 'text', text: { body: 'no id' } },
+        { from: '234', id: 'wamid.Y', type: 'text', text: { body: 'no ts' } },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toEqual([]);
   });
 
   test('drops messages with invalid timestamp', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.Z', timestamp: 'not-a-number', type: 'text', text: { body: 'x' } },
-      { from: '234', id: 'wamid.W', timestamp: -1, type: 'text', text: { body: 'x' } },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        { from: '234', id: 'wamid.Z', timestamp: 'not-a-number', type: 'text', text: { body: 'x' } },
+        { from: '234', id: 'wamid.W', timestamp: -1, type: 'text', text: { body: 'x' } },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toEqual([]);
   });
 
   test('keeps unknown types but with empty body', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.U', timestamp: '1716372000', type: 'contacts', contacts: [{ name: { formatted_name: 'Z' } }] },
-    ]), 'tenant-1');
+    const out = adapter.normalise(
+      baseEnv([
+        {
+          from: '234',
+          id: 'wamid.U',
+          timestamp: '1716372000',
+          type: 'contacts',
+          contacts: [{ name: { formatted_name: 'Z' } }],
+        },
+      ]),
+      'tenant-1',
+    );
 
     expect(out).toHaveLength(1);
     expect(out[0].body).toBe('');
   });
 
   test('every emitted message carries the supplied tenantId', () => {
-    const out = adapter.normalise(baseEnv([
-      { from: '234', id: 'wamid.A', timestamp: '1716372000', type: 'text', text: { body: 'a' } },
-    ]), 'tenant-XYZ');
+    const out = adapter.normalise(
+      baseEnv([{ from: '234', id: 'wamid.A', timestamp: '1716372000', type: 'text', text: { body: 'a' } }]),
+      'tenant-XYZ',
+    );
     expect(out[0].tenantId).toBe('tenant-XYZ');
   });
 });

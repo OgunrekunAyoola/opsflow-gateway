@@ -7,7 +7,10 @@ const mockLpush = jest.fn().mockResolvedValue(1);
 const mockExec = jest.fn().mockResolvedValue([]);
 const mockPipelineLpush = jest.fn();
 const fakePipeline = {
-  lpush: (...a: any[]) => { mockPipelineLpush(...a); return fakePipeline; },
+  lpush: (...a: any[]) => {
+    mockPipelineLpush(...a);
+    return fakePipeline;
+  },
   exec: (...a: any[]) => mockExec(...a),
 };
 jest.mock('../../redis/client', () => ({
@@ -21,12 +24,12 @@ import { publishInboundMessage, publishInboundMessages } from '../../queue/publi
 import { NormalisedMessage } from '../../types/NormalisedMessage';
 
 const msg = (id: string): NormalisedMessage => ({
-  tenantId:   'tenant-1',
-  channel:    'whatsapp',
-  from:       '2348012345678',
-  body:       `body ${id}`,
+  tenantId: 'tenant-1',
+  channel: 'whatsapp',
+  from: '2348012345678',
+  body: `body ${id}`,
   externalId: id,
-  timestamp:  '2026-05-23T10:00:00.000Z',
+  timestamp: '2026-05-23T10:00:00.000Z',
 });
 
 describe('publishInboundMessage', () => {
