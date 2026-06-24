@@ -271,8 +271,8 @@ checked in for privacy — ask the user if you need it).
 
 ## Companion repo — opsflow-core
 
-Lives at `c:\Users\user 1\Desktop\opsFlow_ai\opsFlow-Agent-Desk` (sibling
-directory). Its CLAUDE.md is the source of truth for OpsFlow as a product.
+Lives in the sibling directory `opsFlow-Agent-Desk` (same parent folder as this
+repo). Its CLAUDE.md is the source of truth for OpsFlow as a product.
 This repo's job is bounded by the rules above; everything else — tickets,
 threads, agents, billing, escalation, the AI pipeline — is Core's job.
 
