@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: read
+  # gitleaks-action reads the PR's commit list on pull_request events; without
+  # this it crashes with an octokit error (looks like a scan failure, isn't).
+  pull-requests: read
 
 jobs:
   secrets:
