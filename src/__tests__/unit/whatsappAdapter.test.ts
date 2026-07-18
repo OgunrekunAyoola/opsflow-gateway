@@ -481,7 +481,15 @@ describe('WhatsAppAdapter.normalise — coexistence smb_message_echoes', () => {
 
   test('drops an echo missing the customer address (to)', () => {
     const out = adapter.normalise(
-      echoEnv([{ from: '15550001111', id: 'wamid.ECHO3', timestamp: '1716372000', type: 'text', text: { body: 'x' } }]),
+      echoEnv([
+        {
+          from: '15550001111',
+          id: 'wamid.ECHO3',
+          timestamp: '1716372000',
+          type: 'text',
+          text: { body: 'x' },
+        },
+      ]),
       'tenant-1',
     );
     expect(out).toEqual([]);
@@ -503,8 +511,35 @@ describe('WhatsAppAdapter.normalise — coexistence smb_message_echoes', () => {
       entry: [
         {
           changes: [
-            { field: 'messages', value: { messages: [{ from: '234', id: 'C1', timestamp: '1716372000', type: 'text', text: { body: 'customer says hi' } }] } },
-            { field: 'smb_message_echoes', value: { message_echoes: [{ from: 'V', to: '234', id: 'E1', timestamp: '1716372001', type: 'text', text: { body: 'vendor replies' } }] } },
+            {
+              field: 'messages',
+              value: {
+                messages: [
+                  {
+                    from: '234',
+                    id: 'C1',
+                    timestamp: '1716372000',
+                    type: 'text',
+                    text: { body: 'customer says hi' },
+                  },
+                ],
+              },
+            },
+            {
+              field: 'smb_message_echoes',
+              value: {
+                message_echoes: [
+                  {
+                    from: 'V',
+                    to: '234',
+                    id: 'E1',
+                    timestamp: '1716372001',
+                    type: 'text',
+                    text: { body: 'vendor replies' },
+                  },
+                ],
+              },
+            },
           ],
         },
       ],
@@ -552,10 +587,7 @@ describe('WhatsAppAdapter.detectDroppedFields', () => {
 
   test('dedups across multiple entries', () => {
     const payload = {
-      entry: [
-        { changes: [{ field: 'history', value: {} }] },
-        { changes: [{ field: 'history', value: {} }] },
-      ],
+      entry: [{ changes: [{ field: 'history', value: {} }] }, { changes: [{ field: 'history', value: {} }] }],
     };
     expect(adapter.detectDroppedFields(payload)).toEqual(['history']);
   });
