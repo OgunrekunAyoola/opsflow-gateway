@@ -10,6 +10,14 @@
 
 export type ChannelKind = 'whatsapp' | 'email';
 
+/**
+ * Direction/authorship (WHATSAPP_COEXISTENCE_PLAN.md D1). `customer_inbound` is the default and is
+ * never written explicitly — an absent `kind` means customer_inbound, so every pre-coexistence
+ * message stays byte-for-byte unchanged (backward compat). Only a vendor-echo (the vendor's own
+ * WhatsApp Business app) sets `kind: 'vendor_echo'`.
+ */
+export type MessageKind = 'customer_inbound' | 'vendor_echo';
+
 export interface NormalisedMessage {
   /** Resolved from the Redis routing cache populated by opsflow-core. */
   tenantId: string;
@@ -17,7 +25,11 @@ export interface NormalisedMessage {
   /** Channel of origin. Extend the union when adding a new adapter. */
   channel: ChannelKind;
 
-  /** Customer-side identifier — phone number (whatsapp) or email address. */
+  /**
+   * Customer-side identifier — phone number (whatsapp) or email address. This is the THREAD KEY:
+   * for a vendor_echo message it is still the customer's address (who the vendor replied to), never
+   * the vendor's own number.
+   */
   from: string;
 
   /** Plaintext body. HTML-only emails are converted before this is set. May be empty for media-only messages. */
@@ -34,4 +46,10 @@ export interface NormalisedMessage {
 
   /** ISO 8601 UTC timestamp. */
   timestamp: string;
+
+  /** See {@link MessageKind}. Omitted for ordinary customer messages. */
+  kind?: MessageKind;
+
+  /** True only when `kind === 'vendor_echo'` — the vendor typed this in their own WhatsApp app. */
+  vendorAuthored?: boolean;
 }

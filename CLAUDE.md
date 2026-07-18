@@ -156,11 +156,13 @@ This is the **only** thing Core sees. Every adapter outputs this shape:
 interface NormalisedMessage {
   tenantId:   string;       // resolved from Redis routing cache
   channel:    'whatsapp' | 'email';   // extend the union when adding a channel
-  from:       string;       // phone number (whatsapp) or email address (email)
+  from:       string;       // customer-side id (phone/email) — the THREAD KEY, even for echoes
   body:       string;       // plain-text body — strip HTML before assigning
   mediaUrls?: string[];     // CDN URLs from the vendor; do not download
   externalId: string;       // Meta message id / RFC822 Message-ID — dedup key in Core
   timestamp:  string;       // ISO 8601, UTC
+  kind?:            'customer_inbound' | 'vendor_echo';  // coexistence; absent = customer_inbound
+  vendorAuthored?:  boolean;                              // true only for kind === 'vendor_echo'
 }
 ```
 
@@ -169,6 +171,16 @@ interface NormalisedMessage {
   (`messages[0].id` for Meta, `Message-Id` header for SMTP). It is the dedup
   key in Core. A normalisation that doesn't set this is a bug.
 - `from` is the customer-side identifier. Tenant addresses never appear here.
+  For a `vendor_echo` (a WhatsApp Business app reply the vendor typed themselves,
+  mirrored to us via `smb_message_echoes`), `from` is still the **customer** — the
+  echo's `message_echoes[].to` — so the thread key is consistent. Never the vendor's
+  own number.
+- `kind`/`vendorAuthored`: **coexistence** (WHATSAPP_COEXISTENCE_PLAN.md D1, in
+  opsflow-core). Absent `kind` means `customer_inbound` — every non-coexistence
+  message is unchanged. `normalise()` emits `vendor_echo` for `field:'smb_message_echoes'`
+  webhooks; Core's worker branches on `kind` to persist the vendor's reply + stand the
+  AI down (never creates a ticket for an echo). Adding these was a lockstep change with
+  `opsflow-core/backend/src/workers/inboundMessage.worker.ts` (2026-07-18).
 - `body` is plaintext. HTML-only emails get converted (cheaply — no headless
   browser). Empty bodies are valid (e.g. media-only WhatsApp messages).
 - `mediaUrls` are vendor CDN URLs. The gateway does not fetch or proxy them.

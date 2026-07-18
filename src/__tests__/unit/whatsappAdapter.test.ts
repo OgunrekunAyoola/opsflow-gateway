@@ -415,3 +415,148 @@ describe('WhatsAppAdapter.normalise', () => {
     expect(out[0].tenantId).toBe('tenant-XYZ');
   });
 });
+
+describe('WhatsAppAdapter.normalise — coexistence smb_message_echoes', () => {
+  const echoEnv = (message_echoes: any[]) => ({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'WABA-1',
+        changes: [
+          {
+            field: 'smb_message_echoes',
+            value: { messaging_product: 'whatsapp', message_echoes },
+          },
+        ],
+      },
+    ],
+  });
+
+  test('normalises a vendor-app text reply, keyed by the customer (to), tagged vendor_echo', () => {
+    const out = adapter.normalise(
+      echoEnv([
+        {
+          from: '15550001111', // the vendor's own number — must NOT become NormalisedMessage.from
+          to: '2348012345678', // the customer — the thread key
+          id: 'wamid.ECHO1',
+          timestamp: '1716372000',
+          type: 'text',
+          text: { body: 'On it, sending your invoice now' },
+        },
+      ]),
+      'tenant-1',
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({
+      tenantId: 'tenant-1',
+      channel: 'whatsapp',
+      from: '2348012345678',
+      body: 'On it, sending your invoice now',
+      mediaUrls: undefined,
+      externalId: 'wamid.ECHO1',
+      timestamp: new Date(1716372000 * 1000).toISOString(),
+      kind: 'vendor_echo',
+      vendorAuthored: true,
+    });
+  });
+
+  test('extracts caption for a media echo', () => {
+    const out = adapter.normalise(
+      echoEnv([
+        {
+          from: '15550001111',
+          to: '234',
+          id: 'wamid.ECHO2',
+          timestamp: '1716372000',
+          type: 'image',
+          image: { id: 'M', caption: 'Receipt attached' },
+        },
+      ]),
+      'tenant-1',
+    );
+    expect(out[0].body).toBe('Receipt attached');
+    expect(out[0].kind).toBe('vendor_echo');
+  });
+
+  test('drops an echo missing the customer address (to)', () => {
+    const out = adapter.normalise(
+      echoEnv([{ from: '15550001111', id: 'wamid.ECHO3', timestamp: '1716372000', type: 'text', text: { body: 'x' } }]),
+      'tenant-1',
+    );
+    expect(out).toEqual([]);
+  });
+
+  test('emits multiple echoes from one webhook', () => {
+    const out = adapter.normalise(
+      echoEnv([
+        { from: '1', to: '234', id: 'E1', timestamp: '1716372000', type: 'text', text: { body: 'one' } },
+        { from: '1', to: '234', id: 'E2', timestamp: '1716372001', type: 'text', text: { body: 'two' } },
+      ]),
+      'tenant-1',
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  test('a webhook mixing "messages" and "smb_message_echoes" changes emits both, correctly tagged', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            { field: 'messages', value: { messages: [{ from: '234', id: 'C1', timestamp: '1716372000', type: 'text', text: { body: 'customer says hi' } }] } },
+            { field: 'smb_message_echoes', value: { message_echoes: [{ from: 'V', to: '234', id: 'E1', timestamp: '1716372001', type: 'text', text: { body: 'vendor replies' } }] } },
+          ],
+        },
+      ],
+    };
+    const out = adapter.normalise(payload, 'tenant-1');
+    expect(out).toHaveLength(2);
+    expect(out.find((m) => m.externalId === 'C1')?.kind).toBeUndefined();
+    expect(out.find((m) => m.externalId === 'E1')?.kind).toBe('vendor_echo');
+  });
+});
+
+describe('WhatsAppAdapter.detectDroppedFields', () => {
+  test('returns empty for non-object payload', () => {
+    expect(adapter.detectDroppedFields(null)).toEqual([]);
+    expect(adapter.detectDroppedFields('not json')).toEqual([]);
+  });
+
+  test('returns empty when only "messages" / "smb_message_echoes" are present', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            { field: 'messages', value: {} },
+            { field: 'smb_message_echoes', value: {} },
+          ],
+        },
+      ],
+    };
+    expect(adapter.detectDroppedFields(payload)).toEqual([]);
+  });
+
+  test('detects "history" and "smb_app_state_sync" fields', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            { field: 'history', value: {} },
+            { field: 'smb_app_state_sync', value: {} },
+          ],
+        },
+      ],
+    };
+    expect(adapter.detectDroppedFields(payload).sort()).toEqual(['history', 'smb_app_state_sync']);
+  });
+
+  test('dedups across multiple entries', () => {
+    const payload = {
+      entry: [
+        { changes: [{ field: 'history', value: {} }] },
+        { changes: [{ field: 'history', value: {} }] },
+      ],
+    };
+    expect(adapter.detectDroppedFields(payload)).toEqual(['history']);
+  });
+});

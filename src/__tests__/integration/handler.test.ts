@@ -409,6 +409,72 @@ describe('POST /webhooks/whatsapp — inbound', () => {
   });
 });
 
+// ── Coexistence: smb_message_echoes ─────────────────────────────────────────
+
+describe('POST /webhooks/whatsapp — coexistence vendor echo', () => {
+  test('normalises and enqueues a vendor-app echo, tagged vendor_echo', async () => {
+    const body = JSON.stringify({
+      entry: [
+        {
+          changes: [
+            {
+              field: 'smb_message_echoes',
+              value: {
+                metadata: { phone_number_id: 'PHONE-1' },
+                message_echoes: [
+                  {
+                    from: '15550001111',
+                    to: '2348012345678',
+                    id: 'wamid.ECHO1',
+                    timestamp: '1716372000',
+                    type: 'text',
+                    text: { body: 'vendor replying from the app' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
+
+    const res = await handler(
+      buildEvent({ method: 'POST', body, headers: { 'X-Hub-Signature-256': sign(body) } }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockPublishInboundMessages).toHaveBeenCalledTimes(1);
+    const msgs = mockPublishInboundMessages.mock.calls[0][0];
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toMatchObject({
+      tenantId: 'tenant-1',
+      from: '2348012345678',
+      kind: 'vendor_echo',
+      vendorAuthored: true,
+    });
+  });
+
+  test('logs a visible drop for history/smb_app_state_sync but still returns 200', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const body = JSON.stringify({
+      entry: [{ changes: [{ field: 'history', value: { metadata: { phone_number_id: 'PHONE-1' } } }] }],
+    });
+    mockGetTenantIdByPhoneNumber.mockResolvedValueOnce('tenant-1');
+
+    const res = await handler(
+      buildEvent({ method: 'POST', body, headers: { 'X-Hub-Signature-256': sign(body) } }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockPublishInboundMessages).not.toHaveBeenCalled();
+    const logged = warnSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(logged).toContain('wa_inbound_coexistence_fields_dropped');
+    expect(logged).toContain('history');
+    warnSpy.mockRestore();
+  });
+});
+
 // ── Unknown routes ───────────────────────────────────────────────────────────
 
 describe('unknown routes', () => {

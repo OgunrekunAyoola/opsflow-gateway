@@ -131,6 +131,13 @@ async function handleWhatsAppInbound(
     return OK_EMPTY;
   }
 
+  // Must-be-visible (WHATSAPP_COEXISTENCE_PLAN.md D2): `history` / `smb_app_state_sync` are
+  // consciously unhandled in v1 — log so the drop is observable rather than vanishing silently.
+  const droppedFields = whatsappAdapter.detectDroppedFields(payload);
+  if (droppedFields.length > 0) {
+    log('warn', 'wa_inbound_coexistence_fields_dropped', { tenantId, fields: droppedFields });
+  }
+
   const messages = whatsappAdapter.normalise(payload, tenantId);
   if (messages.length === 0) {
     log('info', 'wa_inbound_no_user_messages', { tenantId });

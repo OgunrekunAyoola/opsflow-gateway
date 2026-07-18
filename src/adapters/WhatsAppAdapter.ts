@@ -3,6 +3,14 @@ import { IGatewayChannelAdapter } from './IGatewayChannelAdapter';
 import { NormalisedMessage } from '../types/NormalisedMessage';
 
 /**
+ * Coexistence webhook fields the gateway deliberately does not turn into messages in v1
+ * (WHATSAPP_COEXISTENCE_PLAN.md §4 DEC-5c — history import is an NDPC decision, not a plumbing
+ * one; app-state/contact sync has no core consumer yet). `detectDroppedFields` surfaces these so
+ * the handler can log+meter the drop instead of it vanishing silently (must-be-visible).
+ */
+const DROPPED_COEXISTENCE_FIELDS = new Set(['history', 'smb_app_state_sync']);
+
+/**
  * WhatsApp Cloud API channel adapter.
  *
  * Responsibilities (pure functions only — no Redis, no fetch, no logging here):
@@ -97,7 +105,12 @@ export class WhatsAppAdapter implements IGatewayChannelAdapter {
    * Convert a Meta WhatsApp Cloud webhook payload into NormalisedMessage[].
    * One webhook can contain multiple messages (Meta batches).
    *
-   * Filters out: status updates, errors, and unknown message types.
+   * Handles two change fields:
+   *   - `messages`           → customer inbound (default `kind`, no `kind` field set)
+   *   - `smb_message_echoes` → coexistence: the vendor's own WhatsApp Business app reply,
+   *                            emitted as `kind:'vendor_echo'` keyed by the CUSTOMER (`to`).
+   * Filters out: status updates, errors, and unknown message types. `history` /
+   * `smb_app_state_sync` are dropped but surfaced via `detectDroppedFields()` (v1, §D2).
    * Keeps:       text, image, video, audio, document, sticker, location, reaction.
    *              (We extract a best-effort body and leave media references for
    *              Core to resolve. The gateway never calls Meta to fetch a URL.)
@@ -114,20 +127,57 @@ export class WhatsAppAdapter implements IGatewayChannelAdapter {
 
       for (const change of changes) {
         if (!isObject(change)) continue;
-        if (change.field !== 'messages') continue;
-
         const value = change.value;
         if (!isObject(value)) continue;
 
-        const messages = Array.isArray(value.messages) ? value.messages : [];
-        for (const msg of messages) {
-          const normalised = this.normaliseOne(msg, tenantId);
-          if (normalised) out.push(normalised);
+        if (change.field === 'messages') {
+          const messages = Array.isArray(value.messages) ? value.messages : [];
+          for (const msg of messages) {
+            const normalised = this.normaliseOne(msg, tenantId);
+            if (normalised) out.push(normalised);
+          }
+        } else if (change.field === 'smb_message_echoes') {
+          // Coexistence (GA May 2025): the vendor sent this from their own WhatsApp Business app —
+          // Meta mirrors it here so Core can persist it + stand the AI down (D3). `message_echoes[]`
+          // items carry the SAME per-type shape as `messages[]` (text/image/.../reaction), just
+          // `from`/`to` swapped: `from` is the vendor's own number, `to` is the customer.
+          const echoes = Array.isArray(value.message_echoes) ? value.message_echoes : [];
+          for (const msg of echoes) {
+            const normalised = this.normaliseEchoOne(msg, tenantId);
+            if (normalised) out.push(normalised);
+          }
         }
+        // Everything else (status receipts, and the deliberately-out-of-scope `history` /
+        // `smb_app_state_sync`) is dropped here — see detectDroppedFields() for the latter two's
+        // visibility.
       }
     }
 
     return out;
+  }
+
+  /**
+   * Fields present in this payload that the gateway saw but did not turn into messages, limited to
+   * the coexistence fields we consciously chose not to handle in v1 (§4 DEC-5c). Pure + side-effect
+   * free by design (this class never logs) — the Lambda handler decides how to surface it.
+   */
+  detectDroppedFields(payload: unknown): string[] {
+    if (!isObject(payload)) return [];
+    const entries = Array.isArray(payload.entry) ? payload.entry : [];
+    const found = new Set<string>();
+
+    for (const entry of entries) {
+      if (!isObject(entry)) continue;
+      const changes = Array.isArray(entry.changes) ? entry.changes : [];
+      for (const change of changes) {
+        if (!isObject(change)) continue;
+        if (typeof change.field === 'string' && DROPPED_COEXISTENCE_FIELDS.has(change.field)) {
+          found.add(change.field);
+        }
+      }
+    }
+
+    return [...found];
   }
 
   private normaliseOne(raw: unknown, tenantId: string): NormalisedMessage | null {
@@ -138,11 +188,55 @@ export class WhatsAppAdapter implements IGatewayChannelAdapter {
     const tsRaw = raw.timestamp;
     if (!externalId || !from || typeof tsRaw === 'undefined') return null;
 
-    // Meta sends epoch seconds as either string or number. Both are valid.
-    const epochSec = typeof tsRaw === 'number' ? tsRaw : Number(tsRaw);
-    if (!Number.isFinite(epochSec) || epochSec <= 0) return null;
-    const timestamp = new Date(epochSec * 1000).toISOString();
+    const timestamp = parseEpochSeconds(tsRaw);
+    if (!timestamp) return null;
 
+    const { body, mediaUrls } = this.extractContent(raw);
+
+    return {
+      tenantId,
+      channel: 'whatsapp',
+      from,
+      body,
+      mediaUrls: mediaUrls.length ? mediaUrls : undefined,
+      externalId,
+      timestamp,
+    };
+  }
+
+  /**
+   * Same field extraction as `normaliseOne`, but for a `message_echoes[]` item: the customer
+   * address is `to` (the vendor sent it, so `from` is the vendor's own number — never the thread
+   * key), and the result is tagged `kind: 'vendor_echo'` / `vendorAuthored: true` (D1).
+   */
+  private normaliseEchoOne(raw: unknown, tenantId: string): NormalisedMessage | null {
+    if (!isObject(raw)) return null;
+
+    const externalId = typeof raw.id === 'string' ? raw.id : null;
+    const from = typeof raw.to === 'string' ? raw.to : null; // customer address — the thread key
+    const tsRaw = raw.timestamp;
+    if (!externalId || !from || typeof tsRaw === 'undefined') return null;
+
+    const timestamp = parseEpochSeconds(tsRaw);
+    if (!timestamp) return null;
+
+    const { body, mediaUrls } = this.extractContent(raw);
+
+    return {
+      tenantId,
+      channel: 'whatsapp',
+      from,
+      body,
+      mediaUrls: mediaUrls.length ? mediaUrls : undefined,
+      externalId,
+      timestamp,
+      kind: 'vendor_echo',
+      vendorAuthored: true,
+    };
+  }
+
+  /** Per-type body/media extraction shared by customer messages and vendor echoes alike. */
+  private extractContent(raw: Record<string, any>): { body: string; mediaUrls: string[] } {
     const type = typeof raw.type === 'string' ? raw.type : 'unknown';
     let body = '';
     const mediaUrls: string[] = [];
@@ -185,16 +279,15 @@ export class WhatsAppAdapter implements IGatewayChannelAdapter {
         body = '';
     }
 
-    return {
-      tenantId,
-      channel: 'whatsapp',
-      from,
-      body,
-      mediaUrls: mediaUrls.length ? mediaUrls : undefined,
-      externalId,
-      timestamp,
-    };
+    return { body, mediaUrls };
   }
+}
+
+/** Meta sends epoch seconds as either string or number. Returns null on anything non-finite/≤0. */
+function parseEpochSeconds(tsRaw: unknown): string | null {
+  const epochSec = typeof tsRaw === 'number' ? tsRaw : Number(tsRaw);
+  if (!Number.isFinite(epochSec) || epochSec <= 0) return null;
+  return new Date(epochSec * 1000).toISOString();
 }
 
 function isObject(v: unknown): v is Record<string, any> {
